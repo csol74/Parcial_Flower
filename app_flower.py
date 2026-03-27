@@ -39,7 +39,6 @@ def load_model():
             return model
         except Exception as e:
             st.error(f"❌ Error al cargar el modelo: {e}")
-            st.info("Asegúrate de que flower_model.keras o flower_model.h5 esté en la carpeta")
             return None
 
 # Función de preprocesamiento
@@ -99,8 +98,11 @@ input_method = st.radio(
     horizontal=True
 )
 
-# Variable para almacenar la imagen
+# Variable para almacenar la imagen y resultados
 image = None
+probabilities = None
+predicted_class = None
+confidence = None
 
 # Opción 1: Subir archivo
 if input_method == "📁 Subir archivo":
@@ -129,14 +131,13 @@ elif input_method == "🔗 URL de imagen":
         with st.spinner('Cargando imagen desde URL...'):
             image = load_image_from_url(url)
 
-# Mostrar imagen y resultados
+# Procesar imagen si existe
 if image is not None:
     # Crear dos columnas
     col1, col2 = st.columns([1, 1])
     
     with col1:
         st.subheader("📷 Imagen cargada:")
-        # CORREGIDO: cambiar use_container_width por use_column_width
         st.image(image, use_column_width=True)
     
     with col2:
@@ -156,45 +157,49 @@ if image is not None:
                 
                 # Barra de progreso visual
                 st.progress(confidence / 100)
+            else:
+                st.error("No se pudo cargar el modelo. Verifica que el archivo flower_model.keras existe.")
     
-    # Gráfico de probabilidades (debajo de las columnas)
-    st.subheader("📊 Distribución de probabilidades:")
-    
-    fig, ax = plt.subplots(figsize=(10, 5))
-    colors = ['#4CAF50' if i == np.argmax(probabilities) else '#ddd' 
-             for i in range(len(CLASSES))]
-    
-    bars = ax.bar(range(len(CLASSES)), probabilities * 100, color=colors)
-    ax.set_xticks(range(len(CLASSES)))
-    ax.set_xticklabels([CLASS_NAMES_ES[c] for c in CLASSES], rotation=45, ha='right')
-    ax.set_ylabel('Probabilidad (%)')
-    ax.set_title('Distribución de Probabilidades por Clase')
-    ax.set_ylim([0, 100])
-    
-    # Agregar valores en las barras
-    for bar, prob in zip(bars, probabilities * 100):
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2., height,
-               f'{prob:.1f}%', ha='center', va='bottom')
-    
-    st.pyplot(fig)
-    
-    # Mostrar tabla de probabilidades
-    with st.expander("📋 Ver probabilidades detalladas"):
-        prob_df = pd.DataFrame({
-            'Clase': [CLASS_NAMES_ES[c] for c in CLASSES],
-            'Nombre Científico': CLASSES,
-            'Probabilidad (%)': probabilities * 100
-        })
-        prob_df = prob_df.sort_values('Probabilidad (%)', ascending=False)
-        st.dataframe(prob_df.style.format({'Probabilidad (%)': '{:.2f}'}))
+    # Solo mostrar gráficos si tenemos predicciones
+    if probabilities is not None:
+        # Gráfico de probabilidades (debajo de las columnas)
+        st.subheader("📊 Distribución de probabilidades:")
         
-        # Mostrar barra horizontal para cada clase
-        st.markdown("### Visualización por clase:")
-        for i, (name_es, name_en) in enumerate(zip(CLASS_NAMES_ES.values(), CLASSES)):
-            prob = probabilities[i] * 100
-            st.write(f"**{name_es}** ({name_en})")
-            st.progress(prob / 100, text=f"{prob:.1f}%")
+        fig, ax = plt.subplots(figsize=(10, 5))
+        colors = ['#4CAF50' if i == np.argmax(probabilities) else '#ddd' 
+                 for i in range(len(CLASSES))]
+        
+        bars = ax.bar(range(len(CLASSES)), probabilities * 100, color=colors)
+        ax.set_xticks(range(len(CLASSES)))
+        ax.set_xticklabels([CLASS_NAMES_ES[c] for c in CLASSES], rotation=45, ha='right')
+        ax.set_ylabel('Probabilidad (%)')
+        ax.set_title('Distribución de Probabilidades por Clase')
+        ax.set_ylim([0, 100])
+        
+        # Agregar valores en las barras
+        for bar, prob in zip(bars, probabilities * 100):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                   f'{prob:.1f}%', ha='center', va='bottom')
+        
+        st.pyplot(fig)
+        
+        # Mostrar tabla de probabilidades
+        with st.expander("📋 Ver probabilidades detalladas"):
+            prob_df = pd.DataFrame({
+                'Clase': [CLASS_NAMES_ES[c] for c in CLASSES],
+                'Nombre Científico': CLASSES,
+                'Probabilidad (%)': probabilities * 100
+            })
+            prob_df = prob_df.sort_values('Probabilidad (%)', ascending=False)
+            st.dataframe(prob_df.style.format({'Probabilidad (%)': '{:.2f}'}))
+            
+            # Mostrar barra horizontal para cada clase
+            st.markdown("### Visualización por clase:")
+            for i, (name_es, name_en) in enumerate(zip(CLASS_NAMES_ES.values(), CLASSES)):
+                prob = probabilities[i] * 100
+                st.write(f"**{name_es}** ({name_en})")
+                st.progress(prob / 100, text=f"{prob:.1f}%")
 
 else:
     # Mensaje inicial según método seleccionado
