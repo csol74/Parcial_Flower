@@ -1,10 +1,12 @@
-# app.py - Aplicación Streamlit
+# app.py - Aplicación Streamlit con Cámara y URL
 import streamlit as st
 import tensorflow as tf
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 import pandas as pd
+import requests
+from io import BytesIO
 
 # Configuración de la página
 st.set_page_config(page_title="Clasificador de Flores", page_icon="🌸", layout="wide")
@@ -26,8 +28,17 @@ CLASS_NAMES_ES = {
 # Cargar modelo
 @st.cache_resource
 def load_model():
-    model = tf.keras.models.load_model('flower_classifier_final.h5')
-    return model
+    try:
+        model = tf.keras.models.load_model('flower_model.keras')
+        return model
+    except:
+        # Si no encuentra .keras, intentar con .h5
+        try:
+            model = tf.keras.models.load_model('flower_model.h5')
+            return model
+        except:
+            st.error("❌ No se encontró el modelo. Asegúrate de que flower_model.keras o flower_model.h5 esté en la carpeta")
+            return None
 
 # Función de preprocesamiento
 def preprocess_image(image):
@@ -47,6 +58,16 @@ def predict_image(model, image):
     confidence = np.max(predictions[0]) * 100
     return predictions[0], predicted_class, confidence
 
+# Función para cargar imagen desde URL
+def load_image_from_url(url):
+    try:
+        response = requests.get(url, timeout=10)
+        img = Image.open(BytesIO(response.content))
+        return img
+    except Exception as e:
+        st.error(f"Error al cargar imagen desde URL: {e}")
+        return None
+
 # Sidebar para información
 with st.sidebar:
     st.header("📋 Información")
@@ -56,7 +77,7 @@ with st.sidebar:
     
     st.write("---")
     st.write("**Instrucciones:**")
-    st.write("1. Sube una imagen de una flor")
+    st.write("1. Elige una opción: Cargar archivo, usar cámara o URL")
     st.write("2. Espera a que el modelo procese")
     st.write("3. Observa los resultados")
     
@@ -68,11 +89,19 @@ with st.sidebar:
     st.write("- 🌻 Girasol (Sunflower)")
     st.write("- 🌷 Tulipán (Tulip)")
 
-# Área principal
-col1, col2 = st.columns([1, 1])
+# Área principal - Selector de método de entrada
+st.subheader("📷 Selecciona método de entrada")
+input_method = st.radio(
+    "¿Cómo quieres cargar la imagen?",
+    ["📁 Subir archivo", "📸 Usar cámara", "🔗 URL de imagen"],
+    horizontal=True
+)
 
-with col1:
-    st.subheader("📤 Cargar Imagen")
+# Variable para almacenar la imagen
+image = None
+
+# Opción 1: Subir archivo
+if input_method == "📁 Subir archivo":
     uploaded_file = st.file_uploader(
         "Selecciona una imagen de flor...",
         type=['jpg', 'jpeg', 'png'],
@@ -81,63 +110,117 @@ with col1:
     
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
-        st.image(image, caption="Imagen cargada", use_container_width=True)
 
-with col2:
-    st.subheader("🔍 Resultados")
+# Opción 2: Usar cámara
+elif input_method == "📸 Usar cámara":
+    st.info("📸 Activa tu cámara para tomar una foto")
+    camera_image = st.camera_input("Tomar foto")
     
-    if uploaded_file is not None:
+    if camera_image is not None:
+        image = Image.open(camera_image)
+
+# Opción 3: URL de imagen
+elif input_method == "🔗 URL de imagen":
+    url = st.text_input("Ingresa la URL de la imagen:", placeholder="https://ejemplo.com/flor.jpg")
+    
+    if url:
+        with st.spinner('Cargando imagen desde URL...'):
+            image = load_image_from_url(url)
+
+# Mostrar imagen y resultados
+if image is not None:
+    # Crear dos columnas
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.subheader("📷 Imagen cargada:")
+        st.image(image, use_container_width=True)
+    
+    with col2:
+        st.subheader("🔍 Resultados")
+        
         with st.spinner('Analizando imagen...'):
             # Cargar modelo
             model = load_model()
             
-            # Realizar predicción
-            probabilities, predicted_class, confidence = predict_image(model, image)
-            
-            # Mostrar resultado principal
-            st.success(f"### 🌟 Predicción: {CLASS_NAMES_ES[predicted_class]}")
-            st.info(f"**Confianza:** {confidence:.2f}%")
-            
-            # Crear gráfico de barras para probabilidades
-            fig, ax = plt.subplots(figsize=(10, 5))
-            colors = ['#ff9999' if i == np.argmax(probabilities) else '#66b3ff' 
-                     for i in range(len(CLASSES))]
-            
-            bars = ax.bar(range(len(CLASSES)), probabilities * 100, color=colors)
-            ax.set_xticks(range(len(CLASSES)))
-            ax.set_xticklabels([CLASS_NAMES_ES[c] for c in CLASSES], rotation=45)
-            ax.set_ylabel('Probabilidad (%)')
-            ax.set_title('Distribución de Probabilidades por Clase')
-            ax.set_ylim([0, 100])
-            
-            # Agregar valores en las barras
-            for bar, prob in zip(bars, probabilities * 100):
-                height = bar.get_height()
-                ax.text(bar.get_x() + bar.get_width()/2., height,
-                       f'{prob:.1f}%', ha='center', va='bottom')
-            
-            st.pyplot(fig)
-            
-            # Mostrar tabla de probabilidades
-            st.subheader("📊 Probabilidades detalladas")
-            prob_df = pd.DataFrame({
-                'Clase': [CLASS_NAMES_ES[c] for c in CLASSES],
-                'Nombre Científico': CLASSES,
-                'Probabilidad (%)': probabilities * 100
-            })
-            prob_df = prob_df.sort_values('Probabilidad (%)', ascending=False)
-            st.dataframe(prob_df.style.format({'Probabilidad (%)': '{:.2f}'}))
-    else:
-        st.info("Por favor, carga una imagen para comenzar el análisis")
-        st.markdown("---")
-        st.markdown("### Ejemplos de imágenes esperadas:")
-        st.markdown("""
-        - 🌼 Flores con pétalos blancos y centro amarillo (Margarita)
-        - 🌿 Flores amarillas con múltiples pétalos (Diente de León)
-        - 🌹 Flores rojas con pétalos enrollados (Rosa)
-        - 🌻 Flores grandes con pétalos amarillos (Girasol)
-        - 🌷 Flores con forma de campana (Tulipán)
-        """)
+            if model is not None:
+                # Realizar predicción
+                probabilities, predicted_class, confidence = predict_image(model, image)
+                
+                # Mostrar resultado principal
+                st.success(f"### 🌟 Predicción: {CLASS_NAMES_ES[predicted_class]}")
+                st.info(f"**Confianza:** {confidence:.2f}%")
+                
+                # Barra de progreso visual
+                st.progress(confidence / 100)
+    
+    # Gráfico de probabilidades (debajo de las columnas)
+    st.subheader("📊 Distribución de probabilidades:")
+    
+    fig, ax = plt.subplots(figsize=(10, 5))
+    colors = ['#4CAF50' if i == np.argmax(probabilities) else '#ddd' 
+             for i in range(len(CLASSES))]
+    
+    bars = ax.bar(range(len(CLASSES)), probabilities * 100, color=colors)
+    ax.set_xticks(range(len(CLASSES)))
+    ax.set_xticklabels([CLASS_NAMES_ES[c] for c in CLASSES], rotation=45, ha='right')
+    ax.set_ylabel('Probabilidad (%)')
+    ax.set_title('Distribución de Probabilidades por Clase')
+    ax.set_ylim([0, 100])
+    
+    # Agregar valores en las barras
+    for bar, prob in zip(bars, probabilities * 100):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height,
+               f'{prob:.1f}%', ha='center', va='bottom')
+    
+    st.pyplot(fig)
+    
+    # Mostrar tabla de probabilidades
+    with st.expander("📋 Ver probabilidades detalladas"):
+        prob_df = pd.DataFrame({
+            'Clase': [CLASS_NAMES_ES[c] for c in CLASSES],
+            'Nombre Científico': CLASSES,
+            'Probabilidad (%)': probabilities * 100
+        })
+        prob_df = prob_df.sort_values('Probabilidad (%)', ascending=False)
+        st.dataframe(prob_df.style.format({'Probabilidad (%)': '{:.2f}'}))
+        
+        # Mostrar barra horizontal para cada clase
+        st.markdown("### Visualización por clase:")
+        for i, (name_es, name_en) in enumerate(zip(CLASS_NAMES_ES.values(), CLASSES)):
+            prob = probabilities[i] * 100
+            st.write(f"**{name_es}** ({name_en})")
+            st.progress(prob / 100, text=f"{prob:.1f}%")
+
+else:
+    # Mensaje inicial según método seleccionado
+    if input_method == "📁 Subir archivo":
+        st.info("👈 Sube una imagen para comenzar el análisis")
+    elif input_method == "📸 Usar cámara":
+        st.info("👈 Activa la cámara y toma una foto para comenzar")
+    elif input_method == "🔗 URL de imagen":
+        st.info("👈 Ingresa una URL de imagen para comenzar")
+    
+    st.markdown("---")
+    st.markdown("### 🌸 Ejemplos de imágenes esperadas:")
+    
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        st.markdown("🌼 **Margarita**")
+        st.caption("Pétalos blancos, centro amarillo")
+    with col2:
+        st.markdown("🌿 **Diente de León**")
+        st.caption("Flores amarillas, múltiples pétalos")
+    with col3:
+        st.markdown("🌹 **Rosa**")
+        st.caption("Pétalos enrollados, roja/rosa")
+    with col4:
+        st.markdown("🌻 **Girasol**")
+        st.caption("Grande, pétalos amarillos")
+    with col5:
+        st.markdown("🌷 **Tulipán**")
+        st.caption("Forma de campana")
 
 # Footer
 st.markdown("---")
@@ -145,5 +228,6 @@ st.markdown("""
 <div style='text-align: center'>
     <p>🔬 Modelo CNN desarrollado para clasificación de flores | Entrenado con Flower Photos Dataset</p>
     <p>⚠️ Para mejor precisión, asegúrate de que la imagen esté bien iluminada y la flor sea claramente visible</p>
+    <p>📷 Puedes usar: Subir archivo | Cámara en tiempo real | URL de imagen</p>
 </div>
 """, unsafe_allow_html=True)
