@@ -29,15 +29,17 @@ CLASS_NAMES_ES = {
 @st.cache_resource
 def load_model():
     try:
+        # Intentar cargar .keras primero
         model = tf.keras.models.load_model('flower_model.keras')
         return model
     except:
-        # Si no encuentra .keras, intentar con .h5
         try:
+            # Si no, intentar .h5
             model = tf.keras.models.load_model('flower_model.h5')
             return model
-        except:
-            st.error("❌ No se encontró el modelo. Asegúrate de que flower_model.keras o flower_model.h5 esté en la carpeta")
+        except Exception as e:
+            st.error(f"❌ Error al cargar el modelo: {e}")
+            st.info("Asegúrate de que flower_model.keras o flower_model.h5 esté en la carpeta")
             return None
 
 # Función de preprocesamiento
@@ -134,7 +136,8 @@ if image is not None:
     
     with col1:
         st.subheader("📷 Imagen cargada:")
-        st.image(image, use_container_width=True)
+        # CORREGIDO: cambiar use_container_width por use_column_width
+        st.image(image, use_column_width=True)
     
     with col2:
         st.subheader("🔍 Resultados")
