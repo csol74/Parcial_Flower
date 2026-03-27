@@ -26,20 +26,16 @@ CLASS_NAMES_ES = {
 }
 
 # Cargar modelo
+# Cargar modelo
 @st.cache_resource
 def load_model():
     try:
-        # Intentar cargar .keras primero
         model = tf.keras.models.load_model('flower_model.keras')
         return model
-    except:
-        try:
-            # Si no, intentar .h5
-            model = tf.keras.models.load_model('flower_model.h5')
-            return model
-        except Exception as e:
-            st.error(f"❌ Error al cargar el modelo: {e}")
-            return None
+    except Exception as e:
+        st.error(f"❌ Error al cargar el modelo: {e}")
+        st.info("Asegúrate de que el archivo flower_model.keras esté en la carpeta")
+        return None
 
 # Función de preprocesamiento
 def preprocess_image(image):
