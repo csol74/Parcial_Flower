@@ -26,12 +26,19 @@ CLASS_NAMES_ES = {
 }
 
 # Cargar modelo
-# Cargar modelo
+
 @st.cache_resource
 def load_model():
     try:
-        model = tf.keras.models.load_model('flower_model.keras')
+        import keras
+        keras.config.enable_unsafe_deserialization()  
+
+        model = tf.keras.models.load_model(
+            'flower_model.keras',
+            compile=False  
+        )
         return model
+
     except Exception as e:
         st.error(f"❌ Error al cargar el modelo: {e}")
         st.info("Asegúrate de que el archivo flower_model.keras esté en la carpeta")
