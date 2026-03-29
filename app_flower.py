@@ -26,16 +26,12 @@ CLASS_NAMES_ES = {
 }
 
 # Cargar modelo
-
 @st.cache_resource
 def load_model():
     try:
-        import keras
-        keras.config.enable_unsafe_deserialization()  
-
         model = tf.keras.models.load_model(
-            'flower_model.keras',
-            compile=False  
+            "flower_model.keras",
+            compile=False
         )
         return model
 
